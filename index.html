@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Programa y gestiona el envío de currículums desde Gmail.">
+    <title>CV Scheduler</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<div class="app">
+<div class="tabs">
+  <button class="tab active" onclick="go('campanas')"><i class="ti ti-send" aria-hidden="true"></i> Campañas</button>
+  <button class="tab" onclick="go('plantilla')"><i class="ti ti-paperclip" aria-hidden="true"></i> Plantilla y CVs</button>
+  <button class="tab" onclick="go('conexiones')"><i class="ti ti-settings" aria-hidden="true"></i> Conexiones</button>
+</div>
+
+<!-- CAMPAÑAS (pestaña por defecto: lista al frente, formulario colapsado) -->
+<div id="tab-campanas" class="panel active">
+  <details class="section">
+    <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.1em;display:flex;align-items:center;gap:7px">
+      <i class="ti ti-plus" aria-hidden="true"></i> Nueva campaña
+    </summary>
+    <div style="margin-top:1.1rem">
+      <div class="row2">
+        <div class="field">
+          <label>Correo destinatario</label>
+          <input type="email" id="new-dest" placeholder="rrhh@empresa.com"/>
+        </div>
+        <div class="field">
+          <label>Nombre empresa (opcional)</label>
+          <input type="text" id="new-empresa" placeholder="Empresa S.A." oninput="updateNewSubject()"/>
+        </div>
+      </div>
+      <div class="field">
+        <label>Vacante</label>
+        <input type="text" id="new-vacante" placeholder="Digitador" oninput="updateNewSubject()"/>
+      </div>
+      <div class="field">
+        <label>Asunto</label>
+        <input type="text" id="new-subject-camp" placeholder=""/>
+      </div>
+      <div class="field">
+        <label>Cuerpo personalizado (opcional — si vacío usa el mensaje por defecto)</label>
+        <textarea id="new-body-camp" placeholder="Dejalo vacío para usar la plantilla de Plantilla y CVs, o escribí un mensaje a medida para esta vacante..."></textarea>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>CV a enviar</label>
+          <select id="new-cv"></select>
+        </div>
+        <div class="field">
+          <label>Duración</label>
+          <select id="new-days">
+            <option value="1">1 día</option>
+            <option value="2">2 días</option>
+            <option value="3" selected>3 días</option>
+            <option value="5">5 días</option>
+            <option value="7">7 días</option>
+          </select>
+        </div>
+      </div>
+      <details style="margin:14px 0">
+        <summary style="cursor:pointer;font-size:13px;color:var(--text-muted);font-weight:500">
+          <i class="ti ti-clock" aria-hidden="true"></i> Seguimiento (opcional) — reenviar si no abren el correo
+        </summary>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)">
+            <input type="checkbox" id="new-followup-enabled" style="width:auto"/> Enviar un seguimiento si no abren el correo
+          </label>
+          <div class="field">
+            <label>Días de espera antes del seguimiento</label>
+            <input type="number" id="new-followup-days" min="1" value="4"/>
+          </div>
+          <div class="field">
+            <label>Asunto del seguimiento (opcional, si vacío usa el mismo asunto)</label>
+            <input type="text" id="new-followup-subject" placeholder="¿Tuviste oportunidad de revisar mi aplicación?"/>
+          </div>
+          <div class="field">
+            <label>Cuerpo del seguimiento (opcional, si vacío usa el mensaje por defecto)</label>
+            <textarea id="new-followup-body" placeholder="Quería darle seguimiento a mi aplicación para la vacante de {{vacante}}..."></textarea>
+          </div>
+        </div>
+      </details>
+      <div class="field">
+        <button class="btn btn-info btn-full" onclick="addCampaign()"><i class="ti ti-plus" aria-hidden="true"></i> Agregar campaña</button>
+      </div>
+    </div>
+  </details>
+  <div id="camps-list"></div>
+</div>
+
+<!-- PLANTILLA Y CVS: todo lo reutilizable al armar una campaña -->
+<div id="tab-plantilla" class="panel">
+  <div class="section">
+    <div class="stitle"><i class="ti ti-message" aria-hidden="true"></i> Mensaje por defecto</div>
+    <div class="field">
+      <label>Asunto por defecto (editable por campaña)</label>
+      <input type="text" id="def-subject" placeholder="Aplicación para vacante de {{vacante}} — Mi Nombre" oninput="save()"/>
+    </div>
+    <div class="field">
+      <label>Cuerpo del mensaje</label>
+      <textarea id="def-body" oninput="save()" placeholder="Estimados señores,&#10;&#10;Me dirijo a ustedes para postularme a la vacante de {{vacante}}...&#10;&#10;Quedo a su disposición,&#10;Mi Nombre"></textarea>
+    </div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap">
+      <button class="btn" style="font-size:12px" onclick="ins('{{vacante}}')"><i class="ti ti-briefcase" style="font-size:12px" aria-hidden="true"></i> vacante</button>
+      <button class="btn" style="font-size:12px" onclick="ins('{{empresa}}')"><i class="ti ti-building" style="font-size:12px" aria-hidden="true"></i> empresa</button>
+      <button class="btn" style="font-size:12px" onclick="ins('{{nombre}}')"><i class="ti ti-user" style="font-size:12px" aria-hidden="true"></i> nombre</button>
+    </div>
+  </div>
+
+  <!-- CVs: colección abierta, uno por vacante si se quiere -->
+  <div class="section">
+    <div class="stitle"><i class="ti ti-paperclip" aria-hidden="true"></i> CVs</div>
+    <p style="font-size:13px;opacity:.7;margin-bottom:1rem">Cargá tantos CVs como necesites — por ejemplo, uno adaptado a cada vacante. Cada campaña elige cuál adjuntar.</p>
+    <div id="cv-list"></div>
+    <div id="cv-drop-new" class="cv-drop" onclick="document.getElementById('cv-in-new').click()">
+      <i class="ti ti-upload" style="font-size:22px" aria-hidden="true"></i>
+      <p style="margin-top:7px">Haz clic para agregar un CV (PDF)</p>
+      <p style="font-size:12px;margin-top:3px;opacity:.6">Se guarda en el navegador</p>
+    </div>
+    <input type="file" id="cv-in-new" accept=".pdf,.doc,.docx" style="display:none" onchange="addCV(this)"/>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><i class="ti ti-clock" aria-hidden="true"></i> Horarios por defecto</div>
+    <div style="display:flex;gap:8px">
+      <input type="time" id="new-time" value="08:00" style="flex:1"/>
+      <button class="btn btn-info" onclick="addTime()"><i class="ti ti-plus" aria-hidden="true"></i> Agregar</button>
+    </div>
+    <div class="times-row" id="times-row"></div>
+  </div>
+</div>
+
+<!-- CONEXIONES: todo lo que se configura una sola vez -->
+<div id="tab-conexiones" class="panel">
+  <div class="section">
+    <div class="stitle"><i class="ti ti-brand-google" aria-hidden="true"></i> Conexión con Gmail</div>
+    <p style="font-size:13px;opacity:.7;line-height:1.6;margin-bottom:1rem">El Client ID se guarda. Al reabrir la app se intenta reconectar en silencio (sin popup) mientras Google recuerde tu consentimiento; si lo revocas o expira, deberás volver a hacer clic en "Conectar con Google".</p>
+    <div class="step-row"><div class="step-n">1</div><div class="step-body"><p>Ir a <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> → crear proyecto</p></div></div>
+    <div class="step-row"><div class="step-n">2</div><div class="step-body"><p>APIs y servicios → Biblioteca → <strong>Gmail API</strong> → Habilitar</p></div></div>
+    <div class="step-row"><div class="step-n">3</div><div class="step-body"><p>Credenciales → Crear credenciales → <strong>ID de cliente OAuth</strong> → tipo: <code>Aplicación web</code></p></div></div>
+    <div class="step-row"><div class="step-n">4</div><div class="step-body"><p>En orígenes autorizados agrega <code>https://claude.ai</code> o tu dominio local</p></div></div>
+    <div class="step-row"><div class="step-n">5</div><div class="step-body"><p>Pega el Client ID abajo</p></div></div>
+    <div class="field" style="margin-top:1rem">
+      <label>Client ID de Google (se guarda automáticamente)</label>
+      <input type="text" id="client-id" placeholder="12345678-abc.apps.googleusercontent.com" oninput="saveClientId()"/>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-info" onclick="connectGmail()"><i class="ti ti-brand-google" aria-hidden="true"></i> Conectar con Google</button>
+      <button class="btn btn-danger" onclick="disconnectGmail()"><i class="ti ti-logout" aria-hidden="true"></i> Desconectar</button>
+    </div>
+    <div id="auth-box" class="auth-box auth-warn" style="display:none"></div>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><i class="ti ti-eye" aria-hidden="true"></i> Seguimiento de aperturas</div>
+    <p style="font-size:13px;opacity:.7;line-height:1.6;margin-bottom:1rem">
+      Para saber si el destinatario abrió el correo hace falta un pequeño endpoint que reciba el píxel de tracking — la app no puede recibirlo sola. Usa Google Apps Script (gratis, en tu propia cuenta de Google):
+    </p>
+    <div class="step-row"><div class="step-n">1</div><div class="step-body"><p>Crea una Google Sheet nueva</p></div></div>
+    <div class="step-row"><div class="step-n">2</div><div class="step-body"><p>Extensiones → Apps Script</p></div></div>
+    <div class="step-row"><div class="step-n">3</div><div class="step-body"><p>Pega el código de <code>apps-script/PixelTracker.gs</code> (incluido en este proyecto)</p></div></div>
+    <div class="step-row"><div class="step-n">4</div><div class="step-body"><p>Implementar → Nueva implementación → <strong>Aplicación web</strong> → acceso "Cualquier usuario"</p></div></div>
+    <div class="step-row"><div class="step-n">5</div><div class="step-body"><p>Pega la URL de la implementación abajo</p></div></div>
+    <div class="field" style="margin-top:1rem">
+      <label>URL del Web App de Apps Script</label>
+      <input type="text" id="pixel-url" placeholder="https://script.google.com/macros/s/AKfycb.../exec" oninput="savePixelUrl()"/>
+    </div>
+    <p style="font-size:12px;margin-top:8px;opacity:.6">
+      Es aproximado: Gmail suele cachear imágenes externas, y si el destinatario bloquea imágenes el píxel no se dispara aunque haya leído el correo.
+    </p>
+  </div>
+
+  <div class="section">
+    <div class="stitle"><i class="ti ti-lock" aria-hidden="true"></i> Seguridad</div>
+    <p style="font-size:13px;opacity:.7;line-height:1.6;margin-bottom:1rem">
+      El Client ID, los CV y las campañas se guardan en este navegador (localStorage). Puedes protegerlos con una contraseña que cifra todo localmente.
+    </p>
+    <div id="lock-status" class="auth-box auth-warn" style="display:none"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button id="btn-lock" class="btn btn-info" onclick="enableLock()"><i class="ti ti-lock" aria-hidden="true"></i> Proteger con contraseña</button>
+      <button id="btn-unlock" class="btn btn-danger" style="display:none" onclick="disableLock()"><i class="ti ti-lock-open" aria-hidden="true"></i> Quitar protección</button>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script src="mailsender.js"></script>
+</body>
+</html>
